@@ -32,17 +32,21 @@ import os
 rast = rasterio.open('DEM/Finse/InputData/11-12_resamp/33-111-120_10m.tif')
 arr = rast.read(1)
 
+
 ## Read in SAGA TWI
 wetind = rasterio.open('DEM/Finse/InputData/11-12_TWI/33-111-120_TWI.tif')
 wIndex = wetind.read(1)
+
 
 ## Read in lake data
 lakemaskrast = rasterio.open('DEM/Finse/InputData/Lakes/Lakes_111-120.tif')
 lakearr = lakemaskrast.read(1)
 
+
 ## Read in Løsmasse data
 lmass = rasterio.open('DEM/Finse/InputData/Løsmasse/Løsmasse_111-120.tif')
 lmassarr = lmass.read(1)
+
 
 ## Generate Morphometrics from Raster Input (calculation-based)
 # Define filtering kernel
@@ -59,7 +63,7 @@ def smooth(mat, kernel):
 
 # Generate 400m filtered DEM
 # Default size 40
-med_400 = smooth(arr, kernel_square(34))
+med_400 = smooth(arr, kernel_square(40))
 
 # Generate general slope layer
 r400 = rd.array(med_400, no_data=np.nan)
@@ -69,7 +73,7 @@ genslope = rd.TerrainAttribute(r400, attrib='slope_riserun')
 # Default size 40, 3
 med_300 = smooth(arr, kernel_square(40))
 hpass300 = arr-med_300
-med_40 = smooth(hpass300, kernel_square(4))
+med_40 = smooth(hpass300, kernel_square(3))
 
 # Low pass filter
 LPass = med_300
@@ -80,10 +84,12 @@ HPass = arr - med_40
 # Median filter
 MED = med_40
 
+
 ## RichDEM Morphometrics (tool-based)
 rmed40 = rd.rdarray(MED, no_data=np.nan)
 slope = rd.TerrainAttribute(rmed40, attrib='slope_riserun')
 curv = rd.TerrainAttribute(rmed40, attrib='curvature')
+
 
 ## Define clustering dataframe
 df = pd.DataFrame()
@@ -114,12 +120,88 @@ lapcurv = cv2.filter2D(arr, -1, kernel)
 lcval = 0.051
 
 # Generate large-scale geomorphology filter
-biglopass = smooth(arr, kernel_square(100)) # 100 = 1km, 200 = 2km)
+biglopass = smooth(arr, kernel_square(140)) # 100 = 1km, 200 = 2km)
 lplap = cv2.filter2D(biglopass, -1, kernel)
 lplapval = 0.012
 
+# Define mask
+maskarea = lapcurv<-lcval
+maskarea = lplap<-lplapval
+maskarea[genslope>0.692]=True
+maskarea[lakearr==1]=True
+df['mask'] = maskarea.flatten()
+df['pix_id'] = df.index
+df_sub = df.loc[df['mask']==False]
+
+# Display mask
+plt.figure(figsize=(15,15))
+ls = LightSource(azdeg=225, altdeg=45)
+shade = ls.hillshade(arr, vert_exag=1, dx=10, dy=10, fraction=1.0)
+plt.imshow(shade, cmap=plt.cm.gray)
+plt.imshow(np.reshape(maskarea, med_40.shape))
+plt.title('Mask')
 
 
+## Clustering via K-Means
+# Setup algorithm
+def scale_df(df_param, scaler=StandardScaler()):
+    print('---> Scaling data prior to clustering')
+    df_scaled = pd.DataFrame(scaler.fit_transform(df_param.values),
+                             columns=df_param.columns, index=df_param.index)
+    return df_scaled, scaler
+def minibatch_kmeans_clustering(df_param, n_clusters=100, n_cores=4, seed=None, **kwargs):
+    X = df_param.to_numpy()
+    col_names = df_param.columns
+    print('---> Clustering with Mini-Batch K-Means in {} clusters'.format(n_clusters))
+    start_time = time.time()
+    miniBKmeans = cluster.MiniBatchKMeans(n_clusters=n_clusters, batch_size=2048, random_state=seed, **kwargs).fit(X)
+    print('---> Mini-Batch Kmean finished in {}s'.format(np.round(time.time()-start_time), 0))
+    df_centers = pd.DataFrame(miniBKmeans.cluster_centers_, columns=col_names)
+    df_param['cluster_labels'] = miniBKmeans.labels_
+    return df_centers, miniBKmeans, df_param['cluster_labels']
+df_scaled, scaler = scale_df(df_sub)
 
+## Determine optical cluster count (default to disabled)
+#distortions = []
+#inertias = []
+#Xa = pd.DataFrame(df_scaled)
+#data = Xa[['slope', 'curv', 'wIndex', 'mask']]
+#sse = {}
+#for k in range(1, 11):
+#    kmeans = KMeans(n_clusters=k, max_iter=300).fit(data)
+#    data['clusters'] = kmeans.labels_
+#    sse[k] = kmeans.inertia_
 
+## plot elbow
+#plt.figure()
+#plt.plot(list(sse.keys()), list(sse.values()))
+#plt.xlabel("Cluster count")
+#plt.ylabel("SSE")
+#plt.show()
 
+# Run clustering process
+df_centers, miniBKmeans, df_sub['cluster_labels'] = minibatch_kmeans_clustering(df_scaled, n_clusters=4, n_cores=4, seed=123)
+df['cluster_sub'] = np.nan
+df.cluster_sub.loc[df_sub.pix_id] = df_sub.cluster_labels
+
+# Display output
+plt.figure(figsize=(15,15))
+ls = LightSource(azdeg=225, altdeg=45)
+shade = ls.hillshade(arr, vert_exag=1, dx=10, dy=10, fraction=1.0)
+plt.imshow(shade, cmap=plt.cm.gray)
+plt.imshow(np.reshape(df.cluster_sub.values, med_40.shape))
+plt.title('Subtracted_Clustered_Map')
+
+# Save and Export output
+sel = np.reshape(df.cluster_sub.values, med_40.shape)
+with rasterio.open('DEM/Finse/OutputData/33-111-120_Cluster.tif',
+    'w',
+    driver='GTiff',
+    height=sel.shape[0],
+    width=sel.shape[1],
+    count=1,
+    dtype=sel.dtype,
+    crs={'init': 'EPSG:3045'},
+    transform=rast.transform,
+) as dst:
+    dst.write(np.reshape(df.cluster_sub.values, med_40.shape), 1)
