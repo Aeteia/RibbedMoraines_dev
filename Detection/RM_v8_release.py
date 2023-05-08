@@ -41,7 +41,14 @@ for filename in os.listdir(Extent_dir):
 
         # Setup Extent Raster
         ExtentRaster = Extent_dir + "33-" + index_fn + "_10m.tif"
-
+        
+        # Fill Holes in Raster
+        Fillableband = ExtentRaster.GetRasterBand(1)
+        filledDEMband = gdal.FillNoData(targetband = Fillableband, maskband = None,
+                                        maxSearchDist = 30, smoothingIterations = 0)
+        print(filledDEMband)
+        ExtentRaster = filledDEMband
+                                        
         # Get raster extent
         src = gdal.Open(ExtentRaster)
         ulx, xres, xskew, uly, yskew, yres = src.GetGeoTransform()
