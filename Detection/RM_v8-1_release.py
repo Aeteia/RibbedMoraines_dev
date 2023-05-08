@@ -45,7 +45,7 @@ for filename in os.listdir(Extent_dir):
         # Fill Holes in Raster
         ER = gdal.Open(ExtentRaster)
         ERBAND = ER.GetRasterBand(1)
-        result = gdal.FillNoData(targetband = ERBAND, maskBand = None,
+        result = gdal.FillNodata(targetband = ERBAND, maskBand = None,
                                  maxSearchDist = 30, smoothingIterations = 0)
         ET = None
         
