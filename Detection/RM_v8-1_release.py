@@ -43,7 +43,7 @@ for filename in os.listdir(Extent_dir):
         ExtentRaster = Extent_dir + "33-" + index_fn + "_10m.tif"
         
         # Fill Holes in Raster
-        filledDEM = gdal.FillNoData(srcfile = ExtentRaster,
+        filledDEM = gdal.FillNodata(srcfile = ExtentRaster,
                                         maxSearchDist = 30, smoothingIterations = 0)
         print(filledDEM)
         ExtentRaster = filledDEM
