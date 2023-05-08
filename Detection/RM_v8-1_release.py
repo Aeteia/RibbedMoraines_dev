@@ -6,7 +6,6 @@ import os
 from pathlib import Path
 import cv2
 import rasterio
-from rasterio.fill import fillnodata
 import numpy as np
 from numpy import *
 import matplotlib.pyplot as plt
@@ -40,15 +39,19 @@ for filename in os.listdir(Extent_dir):
     if filename.endswith(".tif"):
         index_fn = filename[3:10]
 
-        # Setup Extent Raster
+        # Preprocesses
         ExtentRaster = Extent_dir + "33-" + index_fn + "_10m.tif"
         
         # Fill Holes in Raster
-        filledDEM = fillnodata(ExtentRaster, mask=None, max_search_distance = 30, smoothing_iterations=0)
+        ER = gdal.Open(ExtentRaster, GA_Update)
+        ERBAND = ER.GetRasterBand(1)
+        result = gdal.FillNoData(targetband = ERBAND, maskBand = None,
+                                 maxSearchDist = 30, smoothingIterations = 0)
+        ET = None
         
-        print(filledDEM)
-        ExtentRaster = filledDEM
-                                        
+        # Import Extent Raster
+        ExtentRaster = Extent_dir + "33-" + index_fn + "_10m.tif"        
+            
         # Get raster extent
         src = gdal.Open(ExtentRaster)
         ulx, xres, xskew, uly, yskew, yres = src.GetGeoTransform()
