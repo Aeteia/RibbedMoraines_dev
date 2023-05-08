@@ -1,6 +1,7 @@
 ## Combination script of clip and burn process, and clustering.
 
 from osgeo import ogr, gdal
+from gdalconst import *
 import subprocess
 import os
 from pathlib import Path
