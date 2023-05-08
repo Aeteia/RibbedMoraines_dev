@@ -1,7 +1,6 @@
 ## Combination script of clip and burn process, and clustering.
 
 from osgeo import ogr, gdal
-from gdalconst import *
 import subprocess
 import os
 from pathlib import Path
@@ -44,7 +43,7 @@ for filename in os.listdir(Extent_dir):
         ExtentRaster = Extent_dir + "33-" + index_fn + "_10m.tif"
         
         # Fill Holes in Raster
-        ER = gdal.Open(ExtentRaster, GA_Update)
+        ER = gdal.Open(ExtentRaster)
         ERBAND = ER.GetRasterBand(1)
         result = gdal.FillNoData(targetband = ERBAND, maskBand = None,
                                  maxSearchDist = 30, smoothingIterations = 0)
