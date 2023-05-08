@@ -6,6 +6,7 @@ import os
 from pathlib import Path
 import cv2
 import rasterio
+from rasterio.fill import fillnodata
 import numpy as np
 from numpy import *
 import matplotlib.pyplot as plt
@@ -43,7 +44,7 @@ for filename in os.listdir(Extent_dir):
         ExtentRaster = Extent_dir + "33-" + index_fn + "_10m.tif"
         
         # Fill Holes in Raster
-        filledDEM = rasterio.fill.fillnodata(ExtentRaster, mask=None, max_search_distance = 30, smoothing_iterations=0)
+        filledDEM = fillnodata(ExtentRaster, mask=None, max_search_distance = 30, smoothing_iterations=0)
         
         print(filledDEM)
         ExtentRaster = filledDEM
